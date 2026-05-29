@@ -2,6 +2,7 @@ from allauth.socialaccount.admin import SocialTokenAdmin
 from allauth.socialaccount.models import SocialToken
 from django.conf import settings
 from django.contrib import admin
+from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.postgres.fields import ArrayField
 from django.forms.widgets import CheckboxSelectMultiple
 from django.shortcuts import redirect
@@ -264,7 +265,7 @@ class StepAdmin(MetadeployTranslatableAdmin, PlanMixin):
 
 
 @admin.register(User)
-class UserAdmin(AdminHelpTextMixin, admin.ModelAdmin):
+class UserAdmin(AdminHelpTextMixin, BaseUserAdmin):
     help_text = _(
         "GDPR reminder: The username, name, and email are personally identifiable information. "
         "They must be used for support/debugging purposes only, and not exported from this system."
@@ -311,6 +312,25 @@ class CustomSocialTokenAdmin(SocialTokenAdmin):
 
 
 if "binary_database_files" in settings.INSTALLED_APPS:  # pragma: no cover
+    from django import forms
     from binary_database_files.models import File
 
-    admin.site.register(File)
+    class FileUploadForm(forms.ModelForm):
+        upload = forms.FileField(required=False)
+
+        class Meta:
+            model = File
+            fields = ("name",)
+
+    @admin.register(File)
+    class FileAdmin(admin.ModelAdmin):
+        form = FileUploadForm
+        list_display = ("name", "size")
+
+        def save_model(self, request, obj, form, change):
+            uploaded = request.FILES.get("upload")
+            if uploaded:
+                obj.name = obj.name or uploaded.name
+                obj.content = uploaded.read()
+                obj.size = uploaded.size
+            super().save_model(request, obj, form, change)
